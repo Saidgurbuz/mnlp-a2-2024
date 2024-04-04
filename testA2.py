@@ -11,7 +11,7 @@ def hello_A2():
 def test_compute_metrics(compute):
     predictions = [0, 1, 0, 1, 0, 0, 0, 0]
     gold_labels = [1, 1, 1, 0, 0, 0, 0, 1]
-    assert (compute(predictions, gold_labels)[0]==np.array([[3., 1.], [3., 1.]])).all, 'compute_metric wrong answer ❌'
+    assert (compute(predictions, gold_labels)[0]==np.array([[3., 1.], [3., 1.]])).all(), 'compute_metric wrong answer ❌'
     assert compute(predictions, gold_labels)[1]==0.6, 'compute_metric wrong answer ❌'
     assert compute(predictions, gold_labels)[2]==0.3333333333333333, 'compute_metric wrong answer ❌'
     print('compute_metric test correct ✅')
@@ -97,7 +97,7 @@ def test_SADataset(dataset):
           14,  2509,    11,     2]])
     collate_5_1 = np.array([1, 1, 1, 1, 1])
     assert (dataset.collate_fn(dataset[:5])[0].numpy()==collate_5_0).all() and \
-    (dataset.collate_fn(dataset[:5])[1].numpy()==collate_5_1).all, 'SADataset wrong padding or collate_fn ❌'
+    (dataset.collate_fn(dataset[:5])[1].numpy()==collate_5_1).all(), 'SADataset wrong padding or collate_fn ❌'
     collate_5_1_dec = ['positive', 'negative']
     assert dataset.decode_class(np.array([0, 1]))==collate_5_1_dec, 'SADataset wrong decode_class ❌'
     print('SADataset test correct ✅')

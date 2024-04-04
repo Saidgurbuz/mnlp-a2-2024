@@ -38,7 +38,18 @@ def ngram_extraction(prediction_files, tokenizer):
             
             # Replace "..." statement with your code
             for n in range(1, 5):  # we consider 1/2/3/4-gram
-                ...
+                for i in range(len(review_words) - n + 1):
+                    ngram = " ".join(review_words[i:i+n])
+                    if n == 1 and (ngram in stop_words or ngram in puncs):
+                        continue
+                    if any([punc in ngram for punc in puncs]):
+                        continue
+                    if any([word in stop_words or word in puncs for word in review_words[i:i+n]]):
+                        continue
+                    if ngram not in stop_words and ngram not in puncs:
+                        if ngram not in ngrams[n-1]:
+                            ngrams[n-1][ngram] = [0, 0]
+                        ngrams[n-1][ngram][pred_id] += 1
             
             #####################################################
             #                   END OF YOUR CODE                #

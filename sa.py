@@ -28,8 +28,8 @@ class SADataset(Dataset):
         # TODO: Get the special token and token id for PAD from defined tokenizer (self.tokenizer).  #
         ##############################################################################################
         
-        self.pad_token = ...
-        self.pad_id = ...
+        self.pad_token = self.tokenizer.pad_token
+        self.pad_id = self.tokenizer.pad_token_id
         
         ############################################################################
         #                               END OF YOUR CODE                           #
@@ -51,8 +51,8 @@ class SADataset(Dataset):
                 #     - set label id to None if no label is available.                        #
                 ###############################################################################
 
-                input_ids = ...
-                label_id = ...
+                input_ids = self.tokenizer.encode(sample["review"], add_special_tokens=True, max_length=sent_max_length + 2, truncation=True)
+                label_id = self.label_to_id[sample["label"]] if "label" in sample else None
                 
                 ############################################################################
                 #                               END OF YOUR CODE                           #
@@ -81,7 +81,10 @@ class SADataset(Dataset):
         # TODO: if max_length < 0, pad to the length of the longest input sample in the batch        #
         ##############################################################################################
         
-        pad_inputs = ...
+        if max_length < 0:
+            max_length = max(len(input_ids) for input_ids in inputs)
+
+        pad_inputs = [input_ids + [self.pad_id] * (max_length - len(input_ids)) for input_ids in inputs]
         
         ############################################################################
         #                               END OF YOUR CODE                           #
@@ -104,8 +107,8 @@ class SADataset(Dataset):
         # TODO: implement collate_fn for batchify input into preferable format.                     #
         ##############################################################################################
 
-        tensor_batch_ids = ...
-        tensor_labels = ...
+        tensor_batch_ids = torch.tensor(self.padding([sample["ids"] for sample in batch]))
+        tensor_labels = torch.tensor([sample["label"] for sample in batch])
         
         ############################################################################
         #                               END OF YOUR CODE                           #
@@ -129,7 +132,7 @@ class SADataset(Dataset):
         # TODO: implement class decoding function, return "unknown" for unknown class id prediction. #
         ##############################################################################################
         
-        label_name_list = ...
+        label_name_list = [self.id_to_label.get(label_id, "unknown") for label_id in class_ids]
 
         ############################################################################
         #                               END OF YOUR CODE                           #
@@ -152,10 +155,15 @@ def compute_metrics(predictions, gold_labels):
     ##############################################################################
     # TODO: Implement metrics computation.                                       #
     ##############################################################################
+    predictions, gold_labels = np.array(predictions), np.array(gold_labels)
+    TN = (predictions * gold_labels).sum().item()
+    TP = ((1 - predictions) * (1 - gold_labels)).sum().item()
+    FN = (predictions * (1 - gold_labels)).sum().item()
+    FP = ((1 - predictions) * gold_labels).sum().item()
 
-    confusion_matrix = ...
-    f1_positive = ...
-    f1_negative = ...
+    confusion_matrix = np.array([[TP, FN], [FP, TN]])
+    f1_positive = 2 * TP / (2 * TP + FP + FN)
+    f1_negative = 2 * TN / (2 * TN + FP + FN)
 
     ##############################################################################
     #                              END OF YOUR CODE                              #
@@ -199,12 +207,12 @@ def train(train_dataset, dev_dataset, model, device, batch_size, epochs,
     # Replace "..." statement with your code
     
     # calculate total training steps
-    total_steps = ...
-    warmup_steps = ...
+    total_steps = learning_rate * epochs
+    warmup_steps = total_steps * warmup_percent
     
     # set up AdamW optimizer and constant learning rate scheduleer with warmup
-    optimizer = ...
-    scheduler = ...
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
     
     ##############################################################################
     #                              END OF YOUR CODE                              #
@@ -230,7 +238,7 @@ def train(train_dataset, dev_dataset, model, device, batch_size, epochs,
         for i, batch in enumerate(tqdm(train_dataloader, desc="Training")):
             
             # clear the gradients of all optimized parameters
-            ...
+            optimizer.zero_grad()
 
             epoch_train_step += 1
             total_train_step += 1
@@ -239,14 +247,14 @@ def train(train_dataset, dev_dataset, model, device, batch_size, epochs,
             input_ids, labels = batch_tuple
 
             # get model's single-batch outputs and loss
-            outputs = ...
-            loss = ...
+            outputs = model(input_ids, labels=labels)
+            loss = outputs.loss
             
             # conduct back-proporgation
-            ...
+            loss.backward()
 
             # truncate gradient to max_grad_norm
-            ...
+            nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
 
             train_loss_accum += loss.mean().item()
             
@@ -257,7 +265,8 @@ def train(train_dataset, dev_dataset, model, device, batch_size, epochs,
                 running_loss = 0.0
 
             # step forward optimizer and scheduler
-            ...
+            optimizer.step()
+            scheduler.step()
 
         ##############################################################################
         #                              END OF YOUR CODE                              #
@@ -281,7 +290,9 @@ def train(train_dataset, dev_dataset, model, device, batch_size, epochs,
         ##############################################################################################################
         # Replace "..." statement with your code
         if macro_f1 > best_dev_macro_f1:
-            ...
+            best_dev_macro_f1 = macro_f1
+            model.save_pretrained(save_repo)
+            train_dataset.tokenizer.save_pretrained(save_repo)
             print("Model Saved!")
         
         ##############################################################################
@@ -332,11 +343,11 @@ def evaluate(eval_dataset, model, device, batch_size, use_labels=True, result_sa
             #####################################################
             # Replace "..." statement with your code
             if use_labels:
-                outputs = ...
+                outputs = model(input_ids, labels=labels)
             else:
-                outputs = ...
-            loss = ...
-            logits = ...
+                outputs = model(input_ids)
+            loss = outputs.loss
+            logits = outputs.logits
 
             #######################################################
             #                    END OF YOUR CODE                 #
@@ -351,7 +362,7 @@ def evaluate(eval_dataset, model, device, batch_size, use_labels=True, result_sa
     #          TODO: get model predicted labels.        # 
     #####################################################
     # Replace "..." statement with your code
-    pred_labels = ...
+    pred_labels = np.argmax(np.concatenate(batch_preds), axis=1)
 
     #####################################################
     #                   END OF YOUR CODE                #
